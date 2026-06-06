@@ -21,7 +21,7 @@ webpush.setVapidDetails(
 );
 
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:4173', 'http://10.177.157.106:4173'],
+    origin: ['http://localhost:5173', 'http://localhost:4173' ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
