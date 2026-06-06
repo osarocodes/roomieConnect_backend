@@ -1,0 +1,91 @@
+###
+POST http://localhost:3001/api/auth/signup
+Content-Type: application/json
+
+{
+    "identity": {
+        "firstName": "Alex",
+        "lastName": "Johnson",
+        "email": "eboizegbeosaro@gmail.com",
+        "phone": "+2348123456789",
+        "gender": "male",
+        "avatar": "https://example.com/avatar/alex.png"
+    },
+
+    "auth": {
+        "password": "StrongPass@123",
+        "confirmPassword": "StrongPass@123"
+    },
+
+    "university": {
+        "level": "400L",
+        "department": "Computer Science",
+        "yearOfCompletion": "2027",
+        "verifiedStudentStatus": true
+    },
+
+    "lifestyleHabits": {
+        "sleepSchedule": "Early Riser",
+        "cleanliness": 5,
+        "socialHabits": "Moderately Social",
+        "studyHabits": "Prefers Quiet Study Environment",
+        "noiseTolerance": "Medium"
+    },
+
+    "preferences": {
+        "pets": "No pets",
+        "cigarette": "Non-smoker",
+        "guests": "Occasional guests allowed",
+        "musicVolume": "Low to moderate",
+        "sharedMeal": "Occasionally",
+        "preferredGender": "any",
+        "cleanlinessScale": 4,
+        "sleepPattern": "Early Riser"
+    },
+
+    "budget": {
+        "rentRange": {
+        "min": 120000,
+        "max": 180000,
+        "currency": "NGN"
+        },
+        "utilities": "Willing to split evenly",
+        "securityDeposit": "One month rent"
+    },
+
+    "locationPreference": {
+        "preferredArea": "Ekosodin",
+        "commuteTimeMinutes": 20
+    },
+
+    "profile": {
+        "about": "A tech enthusiast with a passion for coding, gaming, and building innovative solutions.",
+        "image": "https://example.com/profile/alexcover.jpg",
+        "interests": ["Coding", "Gaming", "Reading", "Fitness"]
+    },
+
+    "meta": {
+        "age": 22,
+        "compatibility": 88,
+        "universityName": "University of Lagos"
+    }
+}
+
+###
+POST http://localhost:3001/api/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+    "identity": {
+        "email": "alex.johnson@example.com"
+    },
+    "auth": {
+        "password": "StrongPass@123"
+    }
+}
+
+###
+GET http://10.90.184.106:3001/api/matches HTTP/1.1
+Content-Type: application/json
+
+###
