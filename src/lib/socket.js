@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
+import mongoose from "mongoose";
 import BlockUser from "../models/blockUser.model.js";
 
 const app = express();
@@ -19,6 +20,11 @@ const userSocketMap = {};
 
 io.on("connection", async (socket) => {
     const userId = socket.handshake.query.userId;
+    if (!mongoose.isValidObjectId(userId)) {
+        console.error("Invalid or missing user ID in the socket handshake query.");
+        socket.disconnect(true);
+        return;
+    }
     const blockedByMe = await BlockUser.find({ blockerId: userId }).select('blockedId');
     const blockedByOthers = await BlockUser.find({ blockedId: userId }).select('blockerId');
     const blockedSet = new Set([...blockedByMe.map(b => b.blockedId), ...blockedByOthers.map(b => b.blockerId)]);

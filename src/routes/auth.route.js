@@ -7,6 +7,9 @@ import {
     logout,
     checkAuth,
     updateUser,
+    requestOtp,
+    verifyOtp,
+    updatePassword
 } from '../controllers/auth.controllers.js'
 import { getRecommendedMatches } from '../controllers/match.controllers.js';
 import { upload } from '../middlewares/auth.upload.js';
@@ -22,6 +25,9 @@ router.post("/signup",
 );
 router.post("/login", validate(loginSchema), login);
 router.post("/logout", protectRoute, logout);
+router.post("/send-otp", requestOtp);
+router.post("/verify-otp", verifyOtp);
+router.post("/update-password", updatePassword);
 
 router.get("/check", protectRoute, checkAuth);
 

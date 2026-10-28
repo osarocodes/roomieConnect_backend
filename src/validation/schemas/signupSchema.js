@@ -28,7 +28,6 @@ export const signupSchema = z.object({
         level: z.string().min(1),
         department: z.string().min(2),
         yearOfCompletion: z.string().min(1),
-        verifiedStudentStatus: z.boolean().optional(),
     }),
 
     lifestyleHabits: z.object({

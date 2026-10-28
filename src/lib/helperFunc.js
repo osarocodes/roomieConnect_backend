@@ -12,8 +12,8 @@ const WEIGHTS = {
 
     alignmentTest: 1,
     petPerson: 0.5,
-    academicLevel: 0.5,
-    academicDepartment: 0.5,
+    academicLevel: 3,
+    academicDepartment: 3,
 };
 
 export const similarities = (a, b) => {

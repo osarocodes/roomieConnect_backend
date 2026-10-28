@@ -3,6 +3,7 @@ import User from '../models/user.model.js';
 import BlockUser from '../models/blockUser.model.js';
 import UserActivity from '../models/userActivity.model.js';
 import { calculateScore } from '../lib/helperFunc.js';
+import { toMatchUser } from '../lib/userSerializer.js';
 
 export const getRecommendedMatches = async (req, res) => {
     try {
@@ -35,11 +36,10 @@ export const getRecommendedMatches = async (req, res) => {
         .map(candidate => {
             const matchResult = calculateScore(currentUser, candidate);
             return {
-                    user: candidate,
+                    user: toMatchUser(candidate),
                     ...matchResult
                 };
             })
-            // .filter(m => m.compatibility >= 80)
             .sort((a, b) => b.compatibility - a.compatibility)
             .slice(0, 20);
 
@@ -51,6 +51,7 @@ export const getRecommendedMatches = async (req, res) => {
                 returnedMatchIds: rankedMatches.map(m => m.user._id)
             }
         });
+        console.log("rankedMatches", rankedMatches);
 
         res.status(200).json(rankedMatches);
     } catch (error) {
