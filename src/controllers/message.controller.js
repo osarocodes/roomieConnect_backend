@@ -301,7 +301,11 @@ export const searchUsers = async (req, res) => {
 
       res.status(200).json(users);
     } else {
-      const users = await User.find(baseFilter).limit(10).lean();
+      const users = await User.find(baseFilter)
+      .select("identity.firstName identity.lastName identity.profilePic")
+      .limit(10)
+      .lean();
+      
       res.status(200).json(users);
     }
   } catch (error) {
