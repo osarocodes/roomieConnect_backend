@@ -28,7 +28,8 @@ export const getRecommendedMatches = async (req, res) => {
             _id: { $nin: excludedIds },
             "locationPreference.preferredArea": currentUser.locationPreference.preferredArea,
             "budget.rentRange.min": { $lte: currentUser.budget.rentRange.max },
-            "budget.rentRange.max": { $gte: currentUser.budget.rentRange.min }
+            "budget.rentRange.max": { $gte: currentUser.budget.rentRange.min },
+            "identity.gender": { $in: currentUser.roommatePreference.preferredGenders },
         }).select("-auth.password");
         
         const rankedMatches = candidates
