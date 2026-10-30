@@ -17,7 +17,7 @@ export const signupSchema = z.object({
     }),
 
     auth: z.object({
-        password: z.string().min(8),
+        password: z.string().min(8).regex(/^(?=.*[0-9]).*$/, "Password must contain at least one number"),
         confirmPassword: z.string(),
     }).refine((data) => data.password === data.confirmPassword, {
         message: "Passwords do not match",

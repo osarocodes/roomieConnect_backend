@@ -5,7 +5,8 @@ import BlockUser from '../models/blockUser.model.js';
 import UserActivity from '../models/userActivity.model.js';
 import UserReport from '../models/userReports.model.js';
 import Conversation from '../models/Conversation.model.js';
-import PushSubscription from "../models/pushSubscription.model.js"
+import PushSubscription from "../models/pushSubscription.model.js";
+import webpush from 'web-push';
 import cloudinary from '../lib/cloudinary.js';
 import { io, getRecipientSocketId } from '../lib/socket.js';
 import mongoose from 'mongoose';
@@ -133,23 +134,29 @@ export const sendMessages = async (req, res) => {
       updatedAt: new Date()
     });
 
-    const pushSub = await PushSubscription.findOne({ userId: recipient });
-    if (pushSub) {
-      const senderUser = await User.findById(sender).select('identity.firstName');
-      
-      webpush.sendNotification(
-        pushSub.subscription,
-        JSON.stringify({
-          title: `New message from ${senderUser.identity.firstName}`,
-          body: content || '📷 Sent an image',
-          url: `/chat/${conversationId}`
-        })
-      ).catch(err => {
-        // If subscription is expired/invalid, clean it up
-        if (err.statusCode === 410) {
-          PushSubscription.deleteOne({ userId: recipient }).exec();
+    try {
+      const pushSub = await PushSubscription.findOne({ userId: recipient });
+      if (pushSub) {
+        const senderUser = await User.findById(sender).select('identity.firstName');
+
+        await webpush.sendNotification(
+          pushSub.subscription,
+          JSON.stringify({
+            title: `New message from ${senderUser?.identity?.firstName || 'Someone'}`,
+            body: content || '📷 Sent an image',
+            url: `/chat/${conversationId}`
+          })
+        );
+      }
+    } catch (pushError) {
+      console.error("Push notification failed after message was saved:", pushError);
+      if (pushError.statusCode === 404 || pushError.statusCode === 410) {
+        try {
+          await PushSubscription.deleteOne({ userId: recipient });
+        } catch (cleanupError) {
+          console.error("Failed to remove expired push subscription:", cleanupError);
         }
-      });
+      }
     }
 
     res.status(201).json(savedMessage);

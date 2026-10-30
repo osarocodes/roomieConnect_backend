@@ -370,6 +370,11 @@ export const updatePassword = async (req, res) => {
             return res.status(400).json({ error: 'Invalid request or token expired.' });
         }
 
+        const check = signupSchema.shape.auth.shape.password.safeParse(newPassword);
+        if (!check.success) {
+            return res.status(400).json({ error: 'Password does not meet the requirements.' });
+        }
+
         const hashedResetToken = hashOTP(resetToken);
         if (hashedResetToken !== user.identity.resetPasswordToken) {
             return res.status(400).json({ error: 'Invalid reset token.' });

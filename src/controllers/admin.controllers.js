@@ -11,7 +11,7 @@ export const checkAdmin = async (req, res) => {
 
 export const getAllUsersForAdmin = async (req, res) => {
     try {
-        const users = await User.find({'auth.role': 'user' }, { 'auth.password': 0 });
+        const users = await User.find({ 'identity.role': 'User' }, { 'auth.password': 0 });
         res.status(200).json(users);
     } catch (error) {
         res.status(500).json({ message: "Server error while fetching users.", error: error.message });
