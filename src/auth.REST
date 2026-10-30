@@ -80,7 +80,7 @@ Content-Type: application/json
         "email": "alex.johnson@example.com"
     },
     "auth": {
-        "password": "StrongPass@123"
+        "password": { "$ne": null }
     }
 }
 
@@ -89,3 +89,14 @@ GET http://10.90.184.106:3001/api/matches HTTP/1.1
 Content-Type: application/json
 
 ###
+GET  https://unibenportal.com/#users HTTP/1.1
+Content-Type: application/json
+
+###
+POST https://unibenportal.com/#login HTTP/1.1
+Content-Type: application/json
+
+{
+    "UserId": "'",
+    "Password": "1922"
+}

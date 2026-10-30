@@ -351,7 +351,7 @@ export const saveSubscription = async (req, res) => {
       await PushSubscription.findOneAndUpdate(
         { userId },
         { subscription },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
 
       res.status(200).json({ message: 'Subscription saved' })

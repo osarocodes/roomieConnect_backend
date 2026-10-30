@@ -31,7 +31,6 @@ export const getRecommendedMatches = async (req, res) => {
             "budget.rentRange.max": { $gte: currentUser.budget.rentRange.min }
         }).select("-auth.password");
         
-		console.log("candidate", candidates);
         const rankedMatches = candidates
         .map(candidate => {
             const matchResult = calculateScore(currentUser, candidate);
@@ -51,7 +50,6 @@ export const getRecommendedMatches = async (req, res) => {
                 returnedMatchIds: rankedMatches.map(m => m.user._id)
             }
         });
-        console.log("rankedMatches", rankedMatches);
 
         res.status(200).json(rankedMatches);
     } catch (error) {

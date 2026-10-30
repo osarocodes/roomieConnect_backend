@@ -241,7 +241,7 @@ export const updateUser = async (req, res) => {
         const updatedUser = await User.findByIdAndUpdate(
             req.user._id,
             { $set: setObj },
-            { new: true, runValidators: true }
+            { returnDocument: 'after', runValidators: true }
         ).select("-auth.password");
 
         if (!updatedUser) {
@@ -302,6 +302,7 @@ export const requestOtp = async (req, res) => {
 
         user.identity.resetOtp = hashedOtp;
         user.identity.resetOtpExpiry = otpExpires;
+        user.identity.otpAttempts = 0; // Reset OTP attempts on new request
         await user.save();
 
         await sendOtpEmail(cleanEmail, otp);
@@ -323,17 +324,28 @@ export const verifyOtp = async (req, res) => {
             return res.status(400).json({ error: 'Invalid request or OTP expired.' });
         }
 
+        if (user.identity.otpAttempts >= 3) {
+            user.identity.resetOtp = undefined;
+            user.identity.resetOtpExpiry = undefined;
+            user.identity.otpAttempts = 0; // Reset attempts after exceeding limit
+            await user.save();
+            return res.status(400).json({ error: 'Maximum OTP attempts exceeded. Please request a new OTP.' });
+        }
+
         if (Date.now() > user.identity.resetOtpExpiry) {
             return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
         }
 
         const inputHashedOtp = hashOTP(otp);
         if (inputHashedOtp !== user.identity.resetOtp) {
+            user.identity.otpAttempts += 1;
+            await user.save();
             return res.status(400).json({ error: 'Invalid OTP code.' });
         }
 
         user.identity.resetOtp = undefined;
         user.identity.resetOtpExpiry = undefined;
+        user.identity.otpAttempts = 0; // Reset OTP attempts on successful verification
 
         const resetToken = crypto.randomBytes(32).toString('hex');
         user.identity.resetPasswordToken = hashOTP(resetToken);

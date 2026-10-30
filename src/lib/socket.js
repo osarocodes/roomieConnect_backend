@@ -1,25 +1,68 @@
 import { Server } from "socket.io";
+import User from '../models/user.model.js'
+import jwt from "jsonwebtoken";
 import http from "http";
 import express from "express";
 import mongoose from "mongoose";
 import BlockUser from "../models/blockUser.model.js";
+import cookieParser from "cookie-parser";
 
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [
+    "http://localhost:5173",
+    "http://localhost:4173", 
+    "https://roomie-connect-frontend.vercel.app"
+]
+
 const io = new Server(server, {
     cors: {
-        origin: ["http://localhost:5173", "http://localhost:4173", "https://roomie-connect-frontend.vercel.app"],
+        origin: allowedOrigins,
+        credentials: true,
     },
 });
+
+const parseCookies = cookieParser();
 
 export function getRecipientSocketId(recipientId) {
     return userSocketMap[recipientId];
 }
 const userSocketMap = {};
 
+io.use((socket, next) => {
+    parseCookies(socket.request, {}, async (parseError) => {
+        if (parseError) {
+            return next(new Error("Unauthorized"));
+        }
+
+        try {
+            const token = socket.request.cookies?.token;
+            if (!token) {
+                return next(new Error("Unauthorized"));
+            }
+
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            if (typeof decoded !== "object" || !decoded.id) {
+                return next(new Error("Unauthorized"));
+            }
+
+            const user = await User.findById(decoded.id).select("_id");
+            if (!user) {
+                return next(new Error("Unauthorized"));
+            }
+
+            socket.data.userId = user._id.toString();
+            next();
+        } catch (error) {
+            console.error("Socket authenticated failed:", error.message);
+            next(new Error("Unauthorized"));
+        }
+    });
+});
+
 io.on("connection", async (socket) => {
-    const userId = socket.handshake.query.userId;
+    const userId = socket.data.userId;
     if (!mongoose.isValidObjectId(userId)) {
         console.error("Invalid or missing user ID in the socket handshake query.");
         socket.disconnect(true);

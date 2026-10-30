@@ -16,9 +16,12 @@ const userSchema = new mongoose.Schema({
     firstName: { type: String, required: true, index: true },
     lastName: { type: String, required: true, index: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    
     resetOtp: { type: String, default: undefined },
     resetOtpExpiry: { type: Date, default: undefined },
     resetPasswordToken: { type: String, default: undefined },
+    otpAttempts: { type: Number, default: 0 },
+    
     phone: { type: String },
     gender: { type: String, enum: ["male", "female", "any"], required: true },
     // religion: { type: String, required: true },
