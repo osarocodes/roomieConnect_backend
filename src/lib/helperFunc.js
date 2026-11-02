@@ -134,3 +134,15 @@ export const calculateScore = (currentUser, candidate) => {
         reasons
     };
 };
+
+export const artificialDelay = async (startTime) => {
+    const elapsed = Date.now() - startTime;
+    const targetTime = 300; // e.g., pretend processing takes at least 300ms
+    if (elapsed < targetTime) {
+        await new Promise((resolve) => setTimeout(resolve, targetTime - elapsed));
+    }
+}
+
+export const escapeRegExp = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+};

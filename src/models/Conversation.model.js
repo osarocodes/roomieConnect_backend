@@ -8,6 +8,10 @@ const conversationSchema = new mongoose.Schema({
             required: true
         }
     ],
+    participantKey: {
+        type: String,
+        select: false
+    },
     initiatedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
@@ -20,8 +24,22 @@ const conversationSchema = new mongoose.Schema({
 },{ timestamps: true }
 );
 
-// Prevent duplicate conversations between the same two users
-conversationSchema.index({ participants: 1 }, { unique: false });
+conversationSchema.pre('validate', function () {
+    if (this.participants?.length === 2) {
+        this.participantKey = this.participants
+            .map(participant => participant.toString())
+            .sort()
+            .join(':');
+    }
+});
+
+conversationSchema.index(
+    { participantKey: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { participantKey: { $type: 'string' } }
+    }
+);
 
 const Conversation = mongoose.model('Conversation', conversationSchema);
 export default Conversation;

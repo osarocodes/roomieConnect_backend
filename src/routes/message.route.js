@@ -11,7 +11,8 @@ import { sendMessages,
     saveSubscription
 } from "../controllers/message.controller.js";
 import { canCommunicate } from "../middlewares/blockUser.middleware.js";
-import { get } from "mongoose";
+import { upload } from "../middlewares/message.upload.js";
+import { validateFileBuffer, sanitizeAndProcessImage } from "../middlewares/imageSanitizer.middleware.js";
 
 const router = express.Router();
 
@@ -21,9 +22,15 @@ router.get("/search/users", protectRoute, searchUsers);
 router.get("/:conversationId", protectRoute, canCommunicate, getMessages);
 router.post("/conversations", protectRoute, createOrGetConversation);
 
-router.post("/send/:conversationId", protectRoute, canCommunicate, sendMessages);
-router.post("/read/:conversationId", protectRoute, markMessageAsRead);
-router.post("/clear/:conversationId", protectRoute, clearChat);
+router.post("/send/:conversationId", 
+    protectRoute, 
+    canCommunicate, 
+    upload.single('image'),
+    validateFileBuffer,
+    sanitizeAndProcessImage,
+    sendMessages);
+router.post("/read/:conversationId", protectRoute, canCommunicate, markMessageAsRead);
+router.post("/clear/:conversationId", protectRoute, canCommunicate, clearChat);
 
 router.post("/report/new", protectRoute, setUserReport);
 router.post("/notifications/subscribe", protectRoute, saveSubscription);

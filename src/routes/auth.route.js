@@ -12,16 +12,17 @@ import {
     updatePassword
 } from '../controllers/auth.controllers.js'
 import { getRecommendedMatches } from '../controllers/match.controllers.js';
-import { upload } from '../middlewares/auth.upload.js';
+import { uploadProfilePicture, uploadSignupFiles } from '../middlewares/auth.upload.js';
 import { protectRoute } from '../middlewares/auth.middleware.js';
+import { cleanupAuthUploadFiles, validateAuthUploadFiles } from '../middlewares/imageSanitizer.middleware.js';
 
 const router = express.Router();
 
 router.post("/signup",
-    upload.fields([
-        { name: "profilePic", maxCount: 1 },
-        { name: "admissionLetter", maxCount: 1 },
-    ]), signup
+    uploadSignupFiles,
+    cleanupAuthUploadFiles,
+    validateAuthUploadFiles,
+    signup
 );
 router.post("/login", validate(loginSchema), login);
 router.post("/logout", protectRoute, logout);
@@ -31,6 +32,6 @@ router.post("/update-password", updatePassword);
 
 router.get("/check", protectRoute, checkAuth);
 
-router.patch("/users/me", protectRoute, upload.fields([{ name: "profilePic", maxCount: 1 }]), updateUser);
+router.patch("/users/me", protectRoute, uploadProfilePicture, cleanupAuthUploadFiles, validateAuthUploadFiles, updateUser);
 
 export default router

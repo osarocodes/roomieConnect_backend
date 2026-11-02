@@ -9,6 +9,7 @@ import { generateToken } from "../lib/utils.js";
 import { generateOTP, hashOTP } from '../lib/otpServer.js'
 import { sendOtpEmail } from '../lib/emailService.js';
 import { toClientUser } from '../lib/userSerializer.js';
+import { artificialDelay } from '../lib/helperFunc.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -79,6 +80,9 @@ export const signup = async (req, res) => {
         });
     } catch (error) {
         console.error("Error during signup:", error);
+        if (error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ error: 'File size exceeds the 10MB limit.' });
+        }
         res.status(500).json({ message: "Server error during signup.", error: error.message });
     }
 }
@@ -289,28 +293,29 @@ export const requestOtp = async (req, res) => {
     try {
         const { email } = req.body;
         const cleanEmail = email.trim().toLowerCase();
+        const startTime = Date.now();
 
         const user = await User.findOne({ "identity.email": cleanEmail });
 
-        if (!user) {
-            return res.status(200).json({ message: 'If an account exists, an OTP has been sent.' });
+        if (user) {
+            const otp = generateOTP();
+            const hashedOtp = hashOTP(otp);
+            const otpExpires = Date.now() + 10 * 60 * 1000;
+
+            user.identity.resetOtp = hashedOtp;
+            user.identity.resetOtpExpiry = otpExpires;
+            user.identity.otpAttempts = 0; // Reset OTP attempts on new request
+            await user.save();
+
+            await sendOtpEmail(cleanEmail, otp);
+
+        } else {
+            await artificialDelay(startTime);
         }
 
-        const otp = generateOTP();
-        const hashedOtp = hashOTP(otp);
-        const otpExpires = Date.now() + 10 * 60 * 1000;
-
-        user.identity.resetOtp = hashedOtp;
-        user.identity.resetOtpExpiry = otpExpires;
-        user.identity.otpAttempts = 0; // Reset OTP attempts on new request
-        await user.save();
-
-        await sendOtpEmail(cleanEmail, otp);
-
-        return res.status(200).json({ message: 'OTP sent successfully.' });
+        return res.status(200).json({ message: 'If an account exists, an OTP has been sent.' });
     } catch (error) {
-        console.error('Request OTP Error:', error);
-        return res.status(500).json({ error: 'Failed to send OTP code.' });
+        return res.status(200).json({ message: 'If an account exists, an OTP has been sent.' });
     }
 };
 

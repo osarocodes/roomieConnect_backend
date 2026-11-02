@@ -8,6 +8,10 @@ import { toMatchUser } from '../lib/userSerializer.js';
 export const getRecommendedMatches = async (req, res) => {
     try {
         const currentUser = await User.findById(req.user._id);
+        if (!currentUser) {
+            return res.status(404).json({ message: "Current user not found" });
+        }
+
         const blockedByMe = await BlockUser.find({ blockerId: currentUser._id }).select('blockedId');
         const blockedByOthers = await BlockUser.find({ blockedId: currentUser._id }).select('blockerId');
         const blockedIds = [...blockedByMe.map(b => b.blockedId), ...blockedByOthers.map(b => b.blockerId)];
@@ -18,18 +22,16 @@ export const getRecommendedMatches = async (req, res) => {
             currentUser._id,
             ...blockedIds,
         ];
-        
-        if (!currentUser) {
-            return res.status(404).json({ message: "Current user not found" });
-        }
-        
+
         // Hard constraints only
         const candidates = await User.find({
             _id: { $nin: excludedIds },
             "locationPreference.preferredArea": currentUser.locationPreference.preferredArea,
             "budget.rentRange.min": { $lte: currentUser.budget.rentRange.max },
             "budget.rentRange.max": { $gte: currentUser.budget.rentRange.min },
-            "identity.gender": { $in: currentUser.roommatePreference.preferredGenders },
+            ...(currentUser.preferences.preferredGender === "any"
+                ? {}
+                : { "identity.gender": currentUser.preferences.preferredGender }),
         }).select("-auth.password");
         
         const rankedMatches = candidates

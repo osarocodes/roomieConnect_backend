@@ -9,24 +9,60 @@ import PushSubscription from "../models/pushSubscription.model.js";
 import webpush from 'web-push';
 import cloudinary from '../lib/cloudinary.js';
 import { io, getRecipientSocketId } from '../lib/socket.js';
+import { escapeRegExp } from '../lib/helperFunc.js';
 import mongoose from 'mongoose';
 
 export const createOrGetConversation = async (req, res) => {
   try {
     const currentUserId = req.user._id;
-    const { recipientId } = req.body;
+    const recipientId = req.body.recipientId;
 
-    // Check if conversation already exists between these two
-    let conversation = await Conversation.findOne({
-      participants: { $all: [currentUserId, recipientId] }
+    
+    if (typeof recipientId !== 'string' || !mongoose.isObjectIdOrHexString(recipientId)) {
+      return res.status(400).json({ message: 'Invalid recipient ID format' });
+    }
+    
+    const recipientObjectId = new mongoose.Types.ObjectId(recipientId);
+    
+    if (recipientObjectId.equals(currentUserId)) {
+      return res.status(400).json({ message: 'Cannot create a conversation with yourself' });
+    }
+    
+    const recipientUser = await User.findById(recipientObjectId).select("_id");
+    if (!recipientUser) {
+      return res.status(404).json({ message: 'Recipient not found' });
+    }
+    
+    const block = await BlockUser.exists({
+      $or: [
+        { blockerId: currentUserId, blockedId: recipientObjectId },
+        { blockerId: recipientObjectId, blockedId: currentUserId }
+      ]
     });
-
+    
+    if (block) {
+      return res.status(403).json({ message: 'You cannot start this conversation' });
+    }
+    
+    // Check if conversation already exists between these two
+    const participantsFilter = {
+      participants: { $all: [currentUserId, recipientId], $size: 2 }
+    };
+    let conversation = await Conversation.findOne(participantsFilter);
+    
     // If not, create it
     if (!conversation) {
-      conversation = await Conversation.create({
-        participants: [currentUserId, recipientId],
-        initiatedBy: currentUserId
-      });
+      try {
+        conversation = await Conversation.create({
+          participants: [currentUserId, recipientObjectId],
+          initiatedBy: currentUserId
+        });
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+
+        conversation = await Conversation.findOne(participantsFilter);
+        if (!conversation) throw error;
+      }
     }
 
     res.status(200).json(conversation);
@@ -150,6 +186,9 @@ export const sendMessages = async (req, res) => {
       }
     } catch (pushError) {
       console.error("Push notification failed after message was saved:", pushError);
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: 'File size exceeds the 10MB limit.' });
+      }
       if (pushError.statusCode === 404 || pushError.statusCode === 410) {
         try {
           await PushSubscription.deleteOne({ userId: recipient });
@@ -276,20 +315,28 @@ export const getConversations = async (req, res) => {
 
 export const searchUsers = async (req, res) => {
   try {
-    const { query } = req.query;
+    const { rawQuery } = req.query;
     const loggedInUserId = req.user._id;
     const blockedByMe = await BlockUser.find({ blockerId: loggedInUserId }).select('blockedId');
     const blockedByOthers = await BlockUser.find({ blockedId: loggedInUserId }).select('blockerId');
     const blockedIds = [...blockedByMe.map(b => b.blockedId), ...blockedByOthers.map(b => b.blockerId)];
     const adminId = process.env.ADMIN_USER_ID;
 
+    
     if (adminId) {
       blockedIds.push(new mongoose.Types.ObjectId(adminId));
     }
+
+    if (rawQuery.length > 25) {
+      return res.status(400).json({ message: 'Query too long' });
+    }
+
+    const safeQuery = escapeRegExp(rawQuery.trim());
+
     const baseFilter = { _id: { $ne: loggedInUserId, $nin: blockedIds } };
 
-    if (query && query.trim() !== '') {
-      const regex = new RegExp(query, 'i');
+    if (rawQuery && rawQuery.trim() !== '') {
+      const regex = new RegExp(safeQuery, 'i');
       const users = await User.find({
         $and: [
           baseFilter,

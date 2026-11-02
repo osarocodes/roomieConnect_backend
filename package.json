@@ -20,11 +20,13 @@
     "crypto": "^1.0.1",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "file-type": "^22.3.0",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.0.0",
     "mongoose": "^9.0.1",
     "multer": "^2.0.2",
     "resend": "^6.26.0",
+    "sharp": "^0.35.5",
     "socket.io": "^4.8.1",
     "web-push": "^3.6.7",
     "zod": "^4.1.13"
