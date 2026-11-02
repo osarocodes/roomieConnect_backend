@@ -4,6 +4,7 @@ import BlockUser from '../models/blockUser.model.js';
 import UserActivity from '../models/userActivity.model.js';
 import { calculateScore } from '../lib/helperFunc.js';
 import { toMatchUser } from '../lib/userSerializer.js';
+import PlatformSettings, { DEFAULT_MATCHING_SETTINGS } from '../models/platformSettings.model.js';
 
 export const getRecommendedMatches = async (req, res) => {
     try {
@@ -11,6 +12,9 @@ export const getRecommendedMatches = async (req, res) => {
         if (!currentUser) {
             return res.status(404).json({ message: "Current user not found" });
         }
+
+        const platformSettings = await PlatformSettings.findOne({ key: 'global' }).select('matching').lean();
+        const matchingSettings = platformSettings?.matching ?? DEFAULT_MATCHING_SETTINGS;
 
         const blockedByMe = await BlockUser.find({ blockerId: currentUser._id }).select('blockedId');
         const blockedByOthers = await BlockUser.find({ blockedId: currentUser._id }).select('blockerId');
@@ -29,6 +33,7 @@ export const getRecommendedMatches = async (req, res) => {
             "locationPreference.preferredArea": currentUser.locationPreference.preferredArea,
             "budget.rentRange.min": { $lte: currentUser.budget.rentRange.max },
             "budget.rentRange.max": { $gte: currentUser.budget.rentRange.min },
+            ...(matchingSettings.requireVerifiedStudents ? { "university.verifiedStudentStatus": true } : {}),
             ...(currentUser.preferences.preferredGender === "any"
                 ? {}
                 : { "identity.gender": currentUser.preferences.preferredGender }),
@@ -42,8 +47,9 @@ export const getRecommendedMatches = async (req, res) => {
                     ...matchResult
                 };
             })
+            .filter(match => match.compatibility >= matchingSettings.minimumCompatibility)
             .sort((a, b) => b.compatibility - a.compatibility)
-            .slice(0, 20);
+            .slice(0, matchingSettings.resultLimit);
 
         await UserActivity.create({
             userId: currentUser._id,

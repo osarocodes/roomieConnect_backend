@@ -74,9 +74,8 @@ export const signup = async (req, res) => {
         });
 
         res.status(201).json({
-            _id: newUser._id,
-            email: newUser.identity.email,
-            message: "Signup successful! Please check your email to verify your account."
+            ...toClientUser(newUser),
+            message: "Signup successful."
         });
     } catch (error) {
         console.error("Error during signup:", error);
@@ -298,13 +297,37 @@ export const requestOtp = async (req, res) => {
         const user = await User.findOne({ "identity.email": cleanEmail });
 
         if (user) {
+            const now = Date.now();
+            const requestWindowMs = 60 * 60 * 1000;
+            const requestCooldownMs = 60 * 1000;
+            const windowStartedAt = user.identity.resetOtpRequestWindowStartedAt?.getTime() ?? 0;
+            const lastRequestedAt = user.identity.resetOtpRequestedAt?.getTime() ?? 0;
+            const windowExpired = now - windowStartedAt >= requestWindowMs;
+
+            if (
+                (!windowExpired && user.identity.resetOtpRequestCount >= 5) ||
+                now - lastRequestedAt < requestCooldownMs
+            ) {
+                await artificialDelay(startTime);
+                return res.status(200).json({ message: 'If an account exists, an OTP has been sent.' });
+            }
+
             const otp = generateOTP();
             const hashedOtp = hashOTP(otp);
             const otpExpires = Date.now() + 10 * 60 * 1000;
 
+            user.identity.resetOtpRequestWindowStartedAt = windowExpired
+                ? new Date(now)
+                : user.identity.resetOtpRequestWindowStartedAt;
+            user.identity.resetOtpRequestCount = windowExpired
+                ? 1
+                : user.identity.resetOtpRequestCount + 1;
+            user.identity.resetOtpRequestedAt = new Date(now);
             user.identity.resetOtp = hashedOtp;
             user.identity.resetOtpExpiry = otpExpires;
             user.identity.otpAttempts = 0; // Reset OTP attempts on new request
+            user.identity.resetPasswordToken = undefined;
+            user.identity.resetPasswordTokenExpiry = undefined;
             await user.save();
 
             await sendOtpEmail(cleanEmail, otp);
@@ -338,6 +361,10 @@ export const verifyOtp = async (req, res) => {
         }
 
         if (Date.now() > user.identity.resetOtpExpiry) {
+            user.identity.resetOtp = undefined;
+            user.identity.resetOtpExpiry = undefined;
+            user.identity.otpAttempts = 0;
+            await user.save();
             return res.status(400).json({ error: 'OTP has expired. Please request a new one.' });
         }
 
@@ -354,6 +381,7 @@ export const verifyOtp = async (req, res) => {
 
         const resetToken = crypto.randomBytes(32).toString('hex');
         user.identity.resetPasswordToken = hashOTP(resetToken);
+        user.identity.resetPasswordTokenExpiry = new Date(Date.now() + 10 * 60 * 1000);
         await user.save();
 
         return res.status(200).json({
@@ -371,7 +399,14 @@ export const updatePassword = async (req, res) => {
         const cleanEmail = email.trim().toLowerCase();
         const user = await User.findOne({ "identity.email": cleanEmail });
 
-        if (!user || !user.identity.resetPasswordToken) {
+        if (!user || !user.identity.resetPasswordToken || !user.identity.resetPasswordTokenExpiry) {
+            return res.status(400).json({ error: 'Invalid request or token expired.' });
+        }
+
+        if (user.identity.resetPasswordTokenExpiry.getTime() <= Date.now()) {
+            user.identity.resetPasswordToken = undefined;
+            user.identity.resetPasswordTokenExpiry = undefined;
+            await user.save();
             return res.status(400).json({ error: 'Invalid request or token expired.' });
         }
 
@@ -388,6 +423,7 @@ export const updatePassword = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         user.auth.password = await bcrypt.hash(newPassword, salt);
         user.identity.resetPasswordToken = undefined;
+        user.identity.resetPasswordTokenExpiry = undefined;
         await user.save();
 
         return res.status(200).json({ message: 'Password updated successfully.' });

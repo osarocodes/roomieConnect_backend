@@ -1,75 +1,70 @@
 ###
 POST http://localhost:3001/api/auth/signup
+Content-Type: multipart/form-data; boundary=----RoomieConnectBoundary
+
+------RoomieConnectBoundary
+Content-Disposition: form-data; name="data"
 Content-Type: application/json
 
 {
     "identity": {
         "firstName": "Alex",
         "lastName": "Johnson",
-        "email": "eboizegbeosaro@gmail.com",
+        "email": "alex.johnson@example.com",
         "phone": "+2348123456789",
         "gender": "male",
-        "avatar": "https://example.com/avatar/alex.png"
+        "dob": "2004-01-15"
     },
-
     "auth": {
         "password": "StrongPass@123",
         "confirmPassword": "StrongPass@123"
     },
-
     "university": {
         "level": "400L",
         "department": "Computer Science",
-        "yearOfCompletion": "2027",
-        "verifiedStudentStatus": true
+        "yearOfCompletion": "2027"
     },
-
     "lifestyleHabits": {
-        "sleepSchedule": "Early Riser",
-        "cleanliness": 5,
-        "socialHabits": "Moderately Social",
+        "sleepSchedule": "Early sleeper, early riser.",
+        "cleanliness": "I clean immediately.",
+        "socialHabits": "With 1-2 close friends.",
         "studyHabits": "Prefers Quiet Study Environment",
-        "noiseTolerance": "Medium"
+        "noiseTolerance": "Low background noise is okay.",
+        "conflictManagement": "Talk to them gently about it.",
+        "alignmentTest": "Clean space, clear mind."
     },
-
     "preferences": {
-        "pets": "No pets",
-        "cigarette": "Non-smoker",
-        "guests": "Occasional guests allowed",
-        "musicVolume": "Low to moderate",
-        "sharedMeal": "Occasionally",
+        "petPerson": "No pets",
+        "cigaretteSmoker": "Non-smoker",
+        "guests": "Occasional guests only",
+        "spaceSharing": "Okay, as long as they're respectful.",
+        "musicVolume": "Low",
         "preferredGender": "any",
-        "cleanlinessScale": 4,
-        "sleepPattern": "Early Riser"
+        "sharingPersonalItems": "Low - my things are mine"
     },
-
     "budget": {
-        "rentRange": {
-        "min": 120000,
-        "max": 180000,
-        "currency": "NGN"
-        },
-        "utilities": "Willing to split evenly",
-        "securityDeposit": "One month rent"
+        "rentRange": { "min": 120000, "max": 180000, "currency": "NGN" }
     },
-
     "locationPreference": {
         "preferredArea": "Ekosodin",
-        "commuteTimeMinutes": 20
+        "houseOwnership": "No"
     },
-
     "profile": {
-        "about": "A tech enthusiast with a passion for coding, gaming, and building innovative solutions.",
-        "image": "https://example.com/profile/alexcover.jpg",
-        "interests": ["Coding", "Gaming", "Reading", "Fitness"]
-    },
-
-    "meta": {
-        "age": 22,
-        "compatibility": 88,
-        "universityName": "University of Lagos"
+        "about": "A tech enthusiast who enjoys coding, gaming, reading, and fitness.",
+        "interests": ["Coding", "Gaming", "Reading"]
     }
 }
+------RoomieConnectBoundary
+Content-Disposition: form-data; name="profilePic"; filename="profile.jpg"
+Content-Type: image/jpeg
+
+< ./fixtures/profile.jpg
+------RoomieConnectBoundary
+Content-Disposition: form-data; name="admissionLetter"; filename="admission-letter.pdf"
+Content-Type: application/pdf
+
+< ./fixtures/admission-letter.pdf
+------RoomieConnectBoundary--
 
 ###
 POST http://localhost:3001/api/auth/login HTTP/1.1

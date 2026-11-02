@@ -8,7 +8,7 @@ import Conversation from '../models/Conversation.model.js';
 import PushSubscription from "../models/pushSubscription.model.js";
 import webpush from 'web-push';
 import cloudinary from '../lib/cloudinary.js';
-import { io, getRecipientSocketId } from '../lib/socket.js';
+import { io, getRecipientSocketIds } from '../lib/socket.js';
 import { escapeRegExp } from '../lib/helperFunc.js';
 import mongoose from 'mongoose';
 
@@ -118,11 +118,22 @@ export const getMessages = async (req, res) => {
 
 export const sendMessages = async (req, res) => {
   try {
-    const { content, image } = req.body;
+    const rawContent = req.body.content;
+    if (rawContent !== undefined && typeof rawContent !== 'string') {
+      return res.status(400).json({ message: 'Message content must be a string.' });
+    }
+
+    const content = rawContent ?? '';
     const { conversationId } = req.params;
     const sender = req.user._id;
 
-    console.log("Send Message Request - sender:", sender, "conversationId:", conversationId, "content:", content, "image:", image);
+    if (content.trim() === '' && !req.file) {
+      return res.status(400).json({ message: 'A message or image is required.' });
+    }
+
+    if (req.body.image !== undefined) {
+      return res.status(400).json({ message: 'Upload images as a multipart image file.' });
+    }
 
     const conversation = await Conversation.findById(conversationId);
     if (!conversation) {
@@ -139,8 +150,9 @@ export const sendMessages = async (req, res) => {
     }
 
     let imageUrl = null;
-    if (image) {
-      const uploadResponse = await cloudinary.uploader.upload(image, {
+    if (req.file) {
+      const imageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      const uploadResponse = await cloudinary.uploader.upload(imageData, {
         folder: 'roomieconnect/messages',
       });
       imageUrl = uploadResponse.secure_url;
@@ -156,11 +168,11 @@ export const sendMessages = async (req, res) => {
 
     const savedMessage = await newMessage.save();
 
-    const recipientSocketId = getRecipientSocketId(recipient.toString());
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit('newMessage', savedMessage);
-      io.to(recipientSocketId).emit('conversationUpdated', {
-        _id: sender,
+    const recipientSocketIds = getRecipientSocketIds(recipient.toString());
+    if (recipientSocketIds.length) {
+      io.to(recipientSocketIds).emit('newMessage', savedMessage);
+      io.to(recipientSocketIds).emit('conversationUpdated', {
+        conversationId: conversation._id.toString(),
         lastMessage: savedMessage
       });
     }
@@ -186,9 +198,6 @@ export const sendMessages = async (req, res) => {
       }
     } catch (pushError) {
       console.error("Push notification failed after message was saved:", pushError);
-      if (error.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ error: 'File size exceeds the 10MB limit.' });
-      }
       if (pushError.statusCode === 404 || pushError.statusCode === 410) {
         try {
           await PushSubscription.deleteOne({ userId: recipient });
@@ -224,9 +233,9 @@ export const markMessageAsRead = async (req, res) => {
       { $set: { isRead: true } }
     );
 
-    const recipientSocketId = getRecipientSocketId(senderId.toString());
-    if (recipientSocketId) {
-      io.to(recipientSocketId).emit('messageSeen', {
+    const recipientSocketIds = getRecipientSocketIds(senderId.toString());
+    if (recipientSocketIds.length) {
+      io.to(recipientSocketIds).emit('messageSeen', {
         recipient: userId
       });
     }
@@ -257,13 +266,23 @@ export const getConversations = async (req, res) => {
     });
 
     const conversationIds = conversations.map(conv => conv._id);
+    const unreadMatch = {
+      recipient: currentUserId,
+      isRead: false,
+      conversationId: { $in: conversationIds }
+    };
+    if (clearChatRecords.length) {
+      unreadMatch.$or = [
+        { conversationId: { $nin: clearChatRecords.map(record => record.conversationId) } },
+        ...clearChatRecords.map(record => ({
+          conversationId: record.conversationId,
+          createdAt: { $gt: record.clearedAt }
+        }))
+      ];
+    }
     const unreadCounts = await Message.aggregate([
       {
-        $match: {
-          recipient: currentUserId,
-          isRead: false,
-          conversationId: { $in: conversationIds }
-        }
+        $match: unreadMatch
       },
       {
         $group: {
@@ -315,53 +334,52 @@ export const getConversations = async (req, res) => {
 
 export const searchUsers = async (req, res) => {
   try {
-    const { rawQuery } = req.query;
+    const rawQuery = req.query.query;
+    if (rawQuery !== undefined && typeof rawQuery !== 'string') {
+      return res.status(400).json({ message: 'Search query must be a string.' });
+    }
+
+    const query = rawQuery?.trim() ?? '';
     const loggedInUserId = req.user._id;
     const blockedByMe = await BlockUser.find({ blockerId: loggedInUserId }).select('blockedId');
     const blockedByOthers = await BlockUser.find({ blockedId: loggedInUserId }).select('blockerId');
     const blockedIds = [...blockedByMe.map(b => b.blockedId), ...blockedByOthers.map(b => b.blockerId)];
-    const adminId = process.env.ADMIN_USER_ID;
 
-    
-    if (adminId) {
-      blockedIds.push(new mongoose.Types.ObjectId(adminId));
-    }
-
-    if (rawQuery.length > 25) {
+    if (query.length > 25) {
       return res.status(400).json({ message: 'Query too long' });
     }
 
-    const safeQuery = escapeRegExp(rawQuery.trim());
-
-    const baseFilter = { _id: { $ne: loggedInUserId, $nin: blockedIds } };
-
-    if (rawQuery && rawQuery.trim() !== '') {
-      const regex = new RegExp(safeQuery, 'i');
-      const users = await User.find({
-        $and: [
-          baseFilter,
-          {
-            $or: [
-              { "identity.firstName": regex },
-              { "identity.lastName": regex },
-              { "identity.email": regex }
-            ]
-          }
-        ]
-      })
-      .select("identity.firstName identity.lastName identity.profilePic")
-      .limit(10)
+    const safeQuery = escapeRegExp(query);
+    const conversations = await Conversation.find({ participants: loggedInUserId })
+      .populate('participants', 'identity.firstName identity.lastName identity.email identity.profilePic')
+      .sort({ updatedAt: -1 })
       .lean();
+    const regex = query ? new RegExp(safeQuery, 'i') : null;
+    const blockedIdSet = new Set(blockedIds.map(id => id.toString()));
+    const results = conversations.flatMap(conversation => {
+      const participant = conversation.participants.find(
+        person => person._id.toString() !== loggedInUserId.toString()
+      );
 
-      res.status(200).json(users);
-    } else {
-      const users = await User.find(baseFilter)
-      .select("identity.firstName identity.lastName identity.profilePic")
-      .limit(10)
-      .lean();
-      
-      res.status(200).json(users);
-    }
+      if (!participant || blockedIdSet.has(participant._id.toString())) return [];
+
+      const identity = participant.identity;
+      if (regex && !regex.test(`${identity.firstName} ${identity.lastName} ${identity.email}`)) {
+        return [];
+      }
+
+      return [{
+        conversationId: conversation._id.toString(),
+        user: {
+          _id: participant._id,
+          firstName: identity.firstName,
+          lastName: identity.lastName,
+          profilePic: identity.profilePic,
+        },
+      }];
+    }).slice(0, 10);
+
+    res.status(200).json(results);
   } catch (error) {
     console.error("Error searching users:", error);
     res.status(500).json({ message: "Error searching users", error: error.message });

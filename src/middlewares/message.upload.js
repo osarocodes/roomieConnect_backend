@@ -13,10 +13,23 @@ const fileFilter = (req, file, cb) => {
     }
     };
 
-    export const upload = multer({
-        storage: storage,
-        limits: {
-            fileSize: 10 * 1024 * 1024, // Hard limit: 10 MB
-        },
-        fileFilter: fileFilter,
+const upload = multer({
+    storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024,
+        files: 1,
+    },
+    fileFilter,
 });
+
+export const uploadMessageImage = (req, res, next) => {
+    upload.single('image')(req, res, (error) => {
+        if (!error) return next();
+
+        if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+            return res.status(413).json({ message: 'Images must not exceed 10 MB.' });
+        }
+
+        return res.status(400).json({ message: error.message || 'Invalid image upload.' });
+    });
+};

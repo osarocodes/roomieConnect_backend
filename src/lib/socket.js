@@ -6,29 +6,40 @@ import express from "express";
 import mongoose from "mongoose";
 import BlockUser from "../models/blockUser.model.js";
 import cookieParser from "cookie-parser";
+import { isAllowedOrigin } from './cors.js';
 
 const app = express();
 const server = http.createServer(app);
 
-const allowedOrigins = [
-    "http://localhost:5173",
-    "http://localhost:4173", 
-    "https://roomie-connect-frontend.vercel.app"
-]
-
 const io = new Server(server, {
     cors: {
-        origin: allowedOrigins,
+        origin: (origin, callback) => {
+            if (isAllowedOrigin(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
     },
 });
 
 const parseCookies = cookieParser();
 
-export function getRecipientSocketId(recipientId) {
-    return userSocketMap[recipientId];
+export function getRecipientSocketIds(recipientId) {
+    return [...(userSocketMap.get(recipientId) ?? [])];
 }
-const userSocketMap = {};
+const userSocketMap = new Map();
+const blockedUsersByUser = new Map();
+
+const broadcastOnlineUsers = () => {
+    const onlineUserIds = [...userSocketMap.keys()];
+    for (const [userId, socketIds] of userSocketMap) {
+        const blockedUserIds = blockedUsersByUser.get(userId) ?? new Set();
+        const visibleUserIds = onlineUserIds.filter(id => !blockedUserIds.has(id));
+        io.to([...socketIds]).emit("onlineUsers", visibleUserIds);
+    }
+};
 
 io.use((socket, next) => {
     parseCookies(socket.request, {}, async (parseError) => {
@@ -70,29 +81,33 @@ io.on("connection", async (socket) => {
     }
     const blockedByMe = await BlockUser.find({ blockerId: userId }).select('blockedId');
     const blockedByOthers = await BlockUser.find({ blockedId: userId }).select('blockerId');
-    const blockedSet = new Set([...blockedByMe.map(b => b.blockedId), ...blockedByOthers.map(b => b.blockerId)]);
-    const allowed = Object.keys(userSocketMap).filter(id => !blockedSet.has(id));
+    const blockedSet = new Set([
+        ...blockedByMe.map(b => b.blockedId.toString()),
+        ...blockedByOthers.map(b => b.blockerId.toString()),
+    ]);
+
+    if (!socket.connected) return;
     
     if (userId && userId !== "undefined") {
-        userSocketMap[userId] = socket.id;
+        const socketIds = userSocketMap.get(userId) ?? new Set();
+        socketIds.add(socket.id);
+        userSocketMap.set(userId, socketIds);
+        blockedUsersByUser.set(userId, blockedSet);
     }
 
-    // Tell everyone who is online
-    socket.emit("onlineUsers", allowed);
-
-    socket.on("sendMessage", (newMessage) => {
-        const recipientSocketId = userSocketMap[newMessage.recipient];
-        if (recipientSocketId) {
-            io.to(recipientSocketId).emit("newMessage", newMessage);
-        }
-    });
+    broadcastOnlineUsers();
 
     socket.on("disconnect", () => {
-        // We use the userId from the handshake closure
         if (userId) {
-            delete userSocketMap[userId];
+            const socketIds = userSocketMap.get(userId);
+            socketIds?.delete(socket.id);
+
+            if (socketIds?.size === 0) {
+                userSocketMap.delete(userId);
+                blockedUsersByUser.delete(userId);
+            }
         }
-        io.emit("onlineUsers", Object.keys(userSocketMap));
+        broadcastOnlineUsers();
     });
 });
 export { app, server, io };

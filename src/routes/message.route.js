@@ -11,7 +11,7 @@ import { sendMessages,
     saveSubscription
 } from "../controllers/message.controller.js";
 import { canCommunicate } from "../middlewares/blockUser.middleware.js";
-import { upload } from "../middlewares/message.upload.js";
+import { uploadMessageImage } from "../middlewares/message.upload.js";
 import { validateFileBuffer, sanitizeAndProcessImage } from "../middlewares/imageSanitizer.middleware.js";
 
 const router = express.Router();
@@ -25,7 +25,7 @@ router.post("/conversations", protectRoute, createOrGetConversation);
 router.post("/send/:conversationId", 
     protectRoute, 
     canCommunicate, 
-    upload.single('image'),
+    uploadMessageImage,
     validateFileBuffer,
     sanitizeAndProcessImage,
     sendMessages);

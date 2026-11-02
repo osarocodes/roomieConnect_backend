@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import webpush from 'web-push';
 import cookieParser from "cookie-parser";
+import { isAllowedOrigin } from './lib/cors.js';
 dotenv.config()
 import { app, server } from "./lib/socket.js"
 
@@ -22,13 +23,7 @@ webpush.setVapidDetails(
 
 app.use(cors({
     origin: function(origin, callback) {
-        const allowed = [
-            'http://localhost:5173',
-            'http://localhost:4173',
-            'https://roomie-connect-frontend.vercel.app'
-            // process.env.CLIENT_URL
-        ];
-        if (!origin || allowed.includes(origin)) {
+        if (isAllowedOrigin(origin)) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
@@ -53,6 +48,12 @@ app.use((req, res, next) => {
 
 app.use((err, req, res, next) => {
     console.error(err.stack);
+    if (err.type === 'entity.too.large') {
+        return res.status(413).json({ message: 'Request body is too large.' });
+    }
+    if (err instanceof SyntaxError && 'body' in err) {
+        return res.status(400).json({ message: 'Invalid JSON request body.' });
+    }
     res.status(500).json({ message: "Internal Server Error" });
 });
 

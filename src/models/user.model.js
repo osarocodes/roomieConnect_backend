@@ -20,7 +20,11 @@ const userSchema = new mongoose.Schema({
     resetOtp: { type: String, default: undefined },
     resetOtpExpiry: { type: Date, default: undefined },
     resetPasswordToken: { type: String, default: undefined },
+    resetPasswordTokenExpiry: { type: Date, default: undefined },
     otpAttempts: { type: Number, default: 0 },
+    resetOtpRequestedAt: { type: Date, default: undefined },
+    resetOtpRequestWindowStartedAt: { type: Date, default: undefined },
+    resetOtpRequestCount: { type: Number, default: 0 },
     
     phone: { type: String },
     gender: { type: String, enum: ["male", "female", "any"], required: true },
