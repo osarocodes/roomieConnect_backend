@@ -95,7 +95,7 @@ export const blockUser = async (req, res) => {
         });
         await blockEntry.save();
         try {
-            await refreshOnlineUsers([currentUserId, conversationId]);
+            await refreshOnlineUsers();
         } catch (presenceError) {
             console.error("Failed to refresh presence after blocking user:", presenceError);
         }
@@ -129,7 +129,7 @@ export const unblockUser = async (req, res) => {
         }
         await BlockUser.deleteOne({ _id: blockEntry._id });
         try {
-            await refreshOnlineUsers([currentUserId, conversationId]);
+            await refreshOnlineUsers();
         } catch (presenceError) {
             console.error("Failed to refresh presence after unblocking user:", presenceError);
         }

@@ -30,26 +30,33 @@ export function getRecipientSocketIds(recipientId) {
     return [...(userSocketMap.get(recipientId) ?? [])];
 }
 const userSocketMap = new Map();
-const blockedUsersByUser = new Map();
+let presenceRefreshId = 0;
 
-export const refreshOnlineUsers = async (userIds = []) => {
-    await Promise.all(userIds.map(async userId => {
-        const normalizedUserId = userId.toString();
-        if (!userSocketMap.has(normalizedUserId)) return;
-
-        const [blockedByMe, blockedByOthers] = await Promise.all([
-            BlockUser.find({ blockerId: normalizedUserId }).select('blockedId'),
-            BlockUser.find({ blockedId: normalizedUserId }).select('blockerId'),
-        ]);
-        if (!userSocketMap.has(normalizedUserId)) return;
-
-        blockedUsersByUser.set(normalizedUserId, new Set([
-            ...blockedByMe.map(block => block.blockedId.toString()),
-            ...blockedByOthers.map(block => block.blockerId.toString()),
-        ]));
-    }));
-
+export const refreshOnlineUsers = async () => {
+    const refreshId = ++presenceRefreshId;
     const onlineUserIds = [...userSocketMap.keys()];
+    if (onlineUserIds.length === 0) return;
+
+    const blocks = await BlockUser.find({
+        $or: [
+            { blockerId: { $in: onlineUserIds } },
+            { blockedId: { $in: onlineUserIds } },
+        ],
+    }).select('blockerId blockedId').lean();
+
+    if (refreshId !== presenceRefreshId) return;
+
+    const blockedUsersByUser = new Map();
+    for (const userId of onlineUserIds) {
+        blockedUsersByUser.set(userId, new Set());
+    }
+    for (const block of blocks) {
+        const blockerId = block.blockerId.toString();
+        const blockedId = block.blockedId.toString();
+        blockedUsersByUser.get(blockerId)?.add(blockedId);
+        blockedUsersByUser.get(blockedId)?.add(blockerId);
+    }
+
     for (const [userId, socketIds] of userSocketMap) {
         const blockedUserIds = blockedUsersByUser.get(userId) ?? new Set();
         const visibleUserIds = onlineUserIds.filter(id => !blockedUserIds.has(id));
@@ -110,7 +117,6 @@ io.on("connection", async (socket) => {
 
             if (socketIds?.size === 0) {
                 userSocketMap.delete(userId);
-                blockedUsersByUser.delete(userId);
             }
         }
         refreshOnlineUsers().catch(error => {
@@ -119,7 +125,7 @@ io.on("connection", async (socket) => {
     });
 
     try {
-        await refreshOnlineUsers([userId]);
+        await refreshOnlineUsers();
     } catch (error) {
         console.error("Failed to refresh online-user presence:", error);
     }
