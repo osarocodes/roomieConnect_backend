@@ -1,7 +1,7 @@
 const configuredOrigins = new Set([
     'http://localhost:5173',
     'http://localhost:4173',
-    'https://roomie-connect-frontend.vercel.app',
+    'https://roomie-connect-frontend-one.vercel.app',
     process.env.CLIENT_URL,
 ].filter(Boolean));
 
