@@ -32,7 +32,23 @@ export function getRecipientSocketIds(recipientId) {
 const userSocketMap = new Map();
 const blockedUsersByUser = new Map();
 
-const broadcastOnlineUsers = () => {
+export const refreshOnlineUsers = async (userIds = []) => {
+    await Promise.all(userIds.map(async userId => {
+        const normalizedUserId = userId.toString();
+        if (!userSocketMap.has(normalizedUserId)) return;
+
+        const [blockedByMe, blockedByOthers] = await Promise.all([
+            BlockUser.find({ blockerId: normalizedUserId }).select('blockedId'),
+            BlockUser.find({ blockedId: normalizedUserId }).select('blockerId'),
+        ]);
+        if (!userSocketMap.has(normalizedUserId)) return;
+
+        blockedUsersByUser.set(normalizedUserId, new Set([
+            ...blockedByMe.map(block => block.blockedId.toString()),
+            ...blockedByOthers.map(block => block.blockerId.toString()),
+        ]));
+    }));
+
     const onlineUserIds = [...userSocketMap.keys()];
     for (const [userId, socketIds] of userSocketMap) {
         const blockedUserIds = blockedUsersByUser.get(userId) ?? new Set();
@@ -79,23 +95,13 @@ io.on("connection", async (socket) => {
         socket.disconnect(true);
         return;
     }
-    const blockedByMe = await BlockUser.find({ blockerId: userId }).select('blockedId');
-    const blockedByOthers = await BlockUser.find({ blockedId: userId }).select('blockerId');
-    const blockedSet = new Set([
-        ...blockedByMe.map(b => b.blockedId.toString()),
-        ...blockedByOthers.map(b => b.blockerId.toString()),
-    ]);
-
     if (!socket.connected) return;
     
     if (userId && userId !== "undefined") {
         const socketIds = userSocketMap.get(userId) ?? new Set();
         socketIds.add(socket.id);
         userSocketMap.set(userId, socketIds);
-        blockedUsersByUser.set(userId, blockedSet);
     }
-
-    broadcastOnlineUsers();
 
     socket.on("disconnect", () => {
         if (userId) {
@@ -107,7 +113,15 @@ io.on("connection", async (socket) => {
                 blockedUsersByUser.delete(userId);
             }
         }
-        broadcastOnlineUsers();
+        refreshOnlineUsers().catch(error => {
+            console.error("Failed to refresh online-user presence:", error);
+        });
     });
+
+    try {
+        await refreshOnlineUsers([userId]);
+    } catch (error) {
+        console.error("Failed to refresh online-user presence:", error);
+    }
 });
 export { app, server, io };

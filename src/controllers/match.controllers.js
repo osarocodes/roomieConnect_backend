@@ -4,6 +4,7 @@ import BlockUser from '../models/blockUser.model.js';
 import UserActivity from '../models/userActivity.model.js';
 import { calculateScore } from '../lib/helperFunc.js';
 import { toMatchUser } from '../lib/userSerializer.js';
+import { refreshOnlineUsers } from '../lib/socket.js';
 import PlatformSettings, { DEFAULT_MATCHING_SETTINGS } from '../models/platformSettings.model.js';
 
 export const getRecommendedMatches = async (req, res) => {
@@ -93,6 +94,11 @@ export const blockUser = async (req, res) => {
             blockedId: conversationId
         });
         await blockEntry.save();
+        try {
+            await refreshOnlineUsers([currentUserId, conversationId]);
+        } catch (presenceError) {
+            console.error("Failed to refresh presence after blocking user:", presenceError);
+        }
 
         await UserActivity.create({
             userId: currentUserId,
@@ -122,6 +128,11 @@ export const unblockUser = async (req, res) => {
             return res.status(404).json({ message: "Block entry not found" });
         }
         await BlockUser.deleteOne({ _id: blockEntry._id });
+        try {
+            await refreshOnlineUsers([currentUserId, conversationId]);
+        } catch (presenceError) {
+            console.error("Failed to refresh presence after unblocking user:", presenceError);
+        }
 
         await UserActivity.create({
             userId: currentUserId,

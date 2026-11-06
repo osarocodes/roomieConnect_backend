@@ -12,6 +12,30 @@ import { io, getRecipientSocketIds } from '../lib/socket.js';
 import { escapeRegExp } from '../lib/helperFunc.js';
 import mongoose from 'mongoose';
 
+const getUnreadCount = async (conversationId, userId) => {
+  const clearRecord = await ClearChatModel.findOne({ conversationId, clearedBy: userId });
+  const query = { conversationId, recipient: userId, isRead: false };
+
+  if (clearRecord?.clearedAt) {
+    query.createdAt = { $gt: clearRecord.clearedAt };
+  }
+
+  return Message.countDocuments(query);
+};
+
+const emitConversationUpdate = async (userId, conversationId, lastMessage) => {
+  const socketIds = getRecipientSocketIds(userId.toString());
+  if (!socketIds.length) return;
+
+  const unreadCount = await getUnreadCount(conversationId, userId);
+  io.to(socketIds).emit('conversationUpdated', {
+    conversationId: conversationId.toString(),
+    lastMessage,
+    unreadCount,
+    updatedAt: new Date(),
+  });
+};
+
 export const createOrGetConversation = async (req, res) => {
   try {
     const currentUserId = req.user._id;
@@ -81,6 +105,14 @@ export const clearChat = async (req, res) => {
       { $set: { clearedAt: new Date() } },
       { upsert: true }
     );
+    const unreadCount = await getUnreadCount(conversationId, myId);
+    const socketIds = getRecipientSocketIds(myId.toString());
+    if (socketIds.length) {
+      io.to(socketIds).emit('conversationUpdated', {
+        conversationId,
+        unreadCount,
+      });
+    }
     await UserActivity.create({
       userId: myId,
       activityType: "clear_chat",
@@ -168,19 +200,25 @@ export const sendMessages = async (req, res) => {
 
     const savedMessage = await newMessage.save();
 
-    const recipientSocketIds = getRecipientSocketIds(recipient.toString());
-    if (recipientSocketIds.length) {
-      io.to(recipientSocketIds).emit('newMessage', savedMessage);
-      io.to(recipientSocketIds).emit('conversationUpdated', {
-        conversationId: conversation._id.toString(),
-        lastMessage: savedMessage
-      });
-    }
-
     await Conversation.findByIdAndUpdate(conversationId, {
       lastMessage: savedMessage._id,
       updatedAt: new Date()
     });
+
+    const recipientSocketIds = getRecipientSocketIds(recipient.toString());
+    if (recipientSocketIds.length) {
+      io.to(recipientSocketIds).emit('newMessage', savedMessage);
+    }
+
+    const conversationNotifications = await Promise.allSettled([
+      emitConversationUpdate(recipient, conversation._id, savedMessage),
+      emitConversationUpdate(sender, conversation._id, savedMessage),
+    ]);
+    for (const notification of conversationNotifications) {
+      if (notification.status === 'rejected') {
+        console.error('Failed to emit conversation update:', notification.reason);
+      }
+    }
 
     try {
       const pushSub = await PushSubscription.findOne({ userId: recipient });
@@ -233,10 +271,20 @@ export const markMessageAsRead = async (req, res) => {
       { $set: { isRead: true } }
     );
 
+    const unreadCount = await getUnreadCount(conversation._id, userId);
+    const userSocketIds = getRecipientSocketIds(userId.toString());
+    if (userSocketIds.length) {
+      io.to(userSocketIds).emit('conversationUpdated', {
+        conversationId: conversation._id.toString(),
+        unreadCount,
+      });
+    }
+
     const recipientSocketIds = getRecipientSocketIds(senderId.toString());
     if (recipientSocketIds.length) {
       io.to(recipientSocketIds).emit('messageSeen', {
-        recipient: userId
+        recipient: userId.toString(),
+        conversationId: conversation._id.toString(),
       });
     }
 
